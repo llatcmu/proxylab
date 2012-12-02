@@ -82,8 +82,6 @@ void doit(int fd)
 	const char *get = "GET ";
 	const char *version = " HTTP/1.0\r\n";
 
-    int n;
-
 
 	rio_readinitb(&rio1, fd);
 	rio_readlineb(&rio1, buf1, MAXLINE);
@@ -116,7 +114,7 @@ void doit(int fd)
 
     printf("buf1 = %s\n", buf1);
 
-    while (strcmp(buf1, "\n")) {
+    while (strcmp(buf1, "\r\n")) {
 
         getIndex(buf1, index);
 
@@ -168,7 +166,7 @@ void doit(int fd)
     	rio_readlineb(&rio1, buf1, MAXLINE);
     }
 
-    // printf("buf1 = %s\n", buf1);
+    printf("after while\n");
 
     memset(buf1, 0, strlen(buf1));
 
@@ -210,6 +208,7 @@ void doit(int fd)
         printf("requestHeader = %s\n", requestHeader);
     }
 
+    printf("lalalallalla\n");
     printf("%s%s\nhostlen: %u\n", request, requestHeader, strlen(hostname));
 
 	clientfd = open_clientfd(hostname, serverport);
@@ -227,12 +226,7 @@ void doit(int fd)
 
     printf("after initialazition\n");
 
-    n = rio_readlineb(&rio2, buf2, MAXLINE);
-    printf("n = %d\n", n);
     while (rio_readlineb(&rio2, buf2, MAXLINE) > 0) {
-
-        printf("n = %d\n", (int)rio_readlineb(&rio2, buf2, MAXLINE));
-        printf("buf2 = %s\n", buf2);
     	rio_writen(fd, buf2, strlen(buf2));
     }
 
