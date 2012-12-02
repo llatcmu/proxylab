@@ -15,9 +15,28 @@ static const char *proxy_connection = "Proxy-Connection: close\r\n";
 
 int getport(char *uriForward);
 unsigned int getHostname(char *uri);
-// bool validArg(char *p);
 void *getIndex(char *p, char *index);
 void doit(int fd);
+void reinitial(char *buf1, char *buf2, char *method, char *uri, char *uriForward,
+                char *hostname, char *request, char *index, char *requestHeader);
+
+
+void reinitial(char *buf1, char *buf2, char *method, char *uri, char *uriForward,
+                char *hostname, char *request, char *index, char *requestHeader)
+{
+    memset(buf1, 0, strlen(buf1));
+    memset(buf2, 0, strlen(buf2));
+    memset(method, 0, strlen(method));
+    memset(uri, 0, strlen(uri));
+    memset(uriForward, 0, strlen(uriForward));
+    memset(hostname, 0, strlen(hostname));
+    memset(request, 0, strlen(request));
+    memset(index, 0, strlen(index));
+    memset(requestHeader, 0, strlen(requestHeader));
+    return;
+
+}
+
 
 int getport(char *uriForward) 
 {
@@ -45,7 +64,7 @@ unsigned int getHostname(char *uri)
 		count++;
 		p++;
 	}
-	return 0;
+	return (count - 1);
 }
 
 
@@ -86,6 +105,9 @@ void doit(int fd)
 	rio_readinitb(&rio1, fd);
 	rio_readlineb(&rio1, buf1, MAXLINE);
 
+    if (!strlen(buf1))
+        return;
+    
 	sscanf(buf1, "%s %s", method, uri);
 
     printf("method = %s, uri = %s n = %d\n", method, uri, getHostname(uri));
@@ -208,7 +230,7 @@ void doit(int fd)
         printf("requestHeader = %s\n", requestHeader);
     }
 
-    printf("lalalallalla\n");
+
     printf("%s%s\nhostlen: %u\n", request, requestHeader, strlen(hostname));
 
 	clientfd = open_clientfd(hostname, serverport);
@@ -231,6 +253,7 @@ void doit(int fd)
     }
 
     Close(clientfd);
+    reinitial(buf1, buf2, method, uri, uriForward, hostname, request, index, requestHeader);
 
 }
 
@@ -255,13 +278,9 @@ int main(int argc, char **argv)
 	while (1) {
 		clientlen = sizeof(clientaddr);
 		connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
-
-        printf("connfd = %d\n", connfd);
-
+        printf("listenfd = %d, connfd = %d\n", listenfd, connfd);
 		doit(connfd);
-		Close(connfd);
-
-
+		close(connfd);
 	}
     return 0;
 }
