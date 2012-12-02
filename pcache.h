@@ -19,23 +19,30 @@
 #define FOUND 1
 #define NOT_FOUND NULL
 
-typedef struct {
-	int is_valid;
-	int timestamp;
-	int obj_length;
+typedef struct pcacheLine{
+	struct pcacheLine *prev_line;
+	struct pcacheLine *next_line;
     char *uri_key ;		/* use uri as key of the cache */
     char *webobj_buf;   /* pointer to the cached obj */
+    int obj_length;
 } linePCache;
 
 void init_cache();
 
 /* Exposed interfaces */
-int is_cached(char *uri_in);
-int get_webobj_from(char *uri_in, char *cached_obj_out);
-int set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in);
+linePCache* get_webobj_from(char *uri_in);
+linePCache* set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in);
 
 /* Internal helpers*/
  
+int test_cache();
+void add_new_line(linePCache *new_line);
+void put_line_to_head(linePCache *new_head);
 
+void evict_lines_for_size(int needed_size);
+
+/* Line Operations */
+void remove_line(linePCache *line);
+void free_line(linePCache *line);
 #endif /* __PCACHE_H__ */
 /* $end pcache.h */
