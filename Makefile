@@ -7,10 +7,13 @@ all: proxy
 csapp.o: csapp.c csapp.h
 	$(CC) $(CFLAGS) -c csapp.c
 
-proxy.o: proxy.c csapp.h
+proxy.o: proxy.c csapp.h pcache.h
 	$(CC) $(CFLAGS) -c proxy.c
 
-proxy: proxy.o csapp.o
+pcache.o: pcache.c csapp.h pcache.h
+	$(CC) $(CFLAGS) -c pcache.c
+
+proxy: proxy.o csapp.o pcache.o
 
 submit:
 	(make clean; cd ..; tar cvf proxylab.tar proxylab-handout)

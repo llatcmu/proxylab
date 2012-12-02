@@ -37,7 +37,7 @@ void init_cache();
 
 /* Exposed interfaces */
 int is_cached(char *uri_in);
-char* get_webobj_from(char *uri_in);
+char* get_webobj_from(char *uri_in, char *buf1);
 char* get_buf_for_webobj(char *uri_in);
 
 /* Internal helpers*/

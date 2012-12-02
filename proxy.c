@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "string.h"
 #include "csapp.h"
+#include "pcache.h"
 
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
@@ -95,7 +96,7 @@ void doit(int fd)
 	char uriForward[MAXLINE] = {0}, hostname[MAXLINE] = {0};
 	char request[MAXLINE] = {0}, index[MAXLINE] = {0};
 	char requestHeader[MAX_OBJECT_SIZE];
-    char *p;
+    char *p, cacheBuffer;
 	int n, clientfd, serverport = 80;
 	int flags[6] = {0, 0, 0, 0, 0, 0};
 	const char *get = "GET ";
@@ -109,6 +110,16 @@ void doit(int fd)
 	sscanf(buf1, "%s %s", method, uri);
     if (strcmp(method, "GET")) {
         printf("We only can deal with GET method.\n");
+        return;
+    }
+
+    if (get_webobj_from(uri, buf1) != NULL) {
+        get_buf_for_webobj(uri);
+        if ((rio_writen(fd, buf1, strlen(buf1))) < 0) {
+            printf("written error.\n");
+            return;
+        }
+        memset(buf1, 0, sizeof(buf1));
         return;
     }
 
@@ -220,8 +231,9 @@ void doit(int fd)
 
     while ((n = rio_readlineb(&rio2, buf2, MAXLINE)) > 0) {
     	rio_writen(fd, buf2, n);
-        memset(buf2, 0, sizeof(buf2));
-        
+        cacheBuffer = get_buf_for_webobj(uri);
+        cacheBuffer = stpcpy(cacheBuffer, buf2);
+        memset(buf2, 0, sizeof(buf2));        
     }
     if (n < 0)
         return;

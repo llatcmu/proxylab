@@ -36,7 +36,7 @@ int is_cached(char *uri_in){
     }
 }
 
-char* get_webobj_from(char *uri){
+char* get_webobj_from(char *uri, char *buf1){
 	if (centralCache == NULL)
 	{
 		init_cache();
@@ -50,6 +50,7 @@ char* get_webobj_from(char *uri){
 			if (strcmp(centralCache[i].uri_key, uri_in) == 0) {
 				//Found the matching uri
 				centralCache[i].timestamp = timeline;
+				buf1 = centralCache[i].webobj_buf;
 				return centralCache[i].webobj_buf;
             }
         }
@@ -58,6 +59,7 @@ char* get_webobj_from(char *uri){
         	//We've iterated through all cached lines
         	has_empty_line = 1;
             empty_line_number = i;
+            buf1 = NULL;
 
         	return NOT_FOUND;
         }
