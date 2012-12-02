@@ -26,13 +26,6 @@ typedef struct {
     char *webobj_buf;   /* pointer to the cached obj */
 } linePCache;
 
-static linePCache *centralCache;
-
-int number_of_sets = MAX_CACHE_SIZE / MAX_OBJECT_SIZE;
-static int has_empty_line;
-static int empty_line_number;
-static unsigned int timeline;
-
 void init_cache();
 
 /* Exposed interfaces */
