@@ -16,6 +16,9 @@
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
 
+#define FOUND 1
+#define NOT_FOUND NULL
+
 typedef struct {
 	int is_valid;
 	int timestamp;
@@ -24,6 +27,11 @@ typedef struct {
 } linePCache;
 
 static linePCache *centralCache;
+
+int number_of_sets = MAX_CACHE_SIZE / MAX_OBJECT_SIZE;
+static int has_empty_line;
+static int empty_line_number;
+static unsigned int timeline;
 
 void init_cache();
 
