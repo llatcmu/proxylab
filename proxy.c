@@ -20,7 +20,6 @@ static const char *proxy_connection = "Proxy-Connection: close\r\n";
 
 
 
-int getport(char *uriForward);
 unsigned int getHostname(char *uri);
 void *getIndex(char *p, char *index);
 void doit(int fd);
@@ -45,13 +44,6 @@ void reinitial(char *buf1, char *buf2, char *method, char *uri, char *uriForward
 }
 
 
-int getport(char *uriForward) 
-{
-	int port  = 80;
-
-    return port;
-
-}
 
 unsigned int getHostname(char *uri) 
 {
@@ -109,20 +101,18 @@ void doit(int fd)
 	const char *get = "GET ";
 	const char *version = " HTTP/1.0\r\n";
 
-
 	rio_readinitb(&rio1, fd);
-	rio_readlineb(&rio1, buf1, MAXLINE);
-
-    if (!strlen(buf1))
+	
+    if (rio_readlineb(&rio1, buf1, MAXLINE) <= 0)
         return;
 
 	sscanf(buf1, "%s %s", method, uri);
-
-    printf("method = %s, uri = %s n = %d\n", method, uri, getHostname(uri));
+    if (strcmp(method, "GET")) {
+        printf("We only can deal with GET method.\n");
+        return;
+    }
 
 	strncpy(hostname, uri, getHostname(uri));
-
-    printf("hostname before tok = %s\n", hostname);
 
     p = memchr(hostname, '/', strlen(hostname));
     p = memchr(p + 1, '/', strlen(hostname));
@@ -142,102 +132,74 @@ void doit(int fd)
 
     printf("request = %s\n", request);
 
-	memset(buf1, 0, strlen(buf1));
-	rio_readlineb(&rio1, buf1, MAXLINE);
-
-    printf("buf1 = %s\n", buf1);
+	memset(buf1, 0, sizeof(buf1));
+	if ((n = rio_readlineb(&rio1, buf1, MAXLINE)) < 0) {
+        return;
+    }
 
     while (strcmp(buf1, "\r\n")) {
 
         getIndex(buf1, index);
-
-        printf("index = %s\n", index);
     	
     	if (!strcmp("Host", index)) {
     		flags[HOST] = 1;
-
     		strcat(requestHeader, buf1);
-            // printf("requestHeader = %s\n", requestHeader);
     	}
     	else if (!strcmp("User-Agent", index)) {
     		flags[USER_AGENT] = 1;
-
     		strcat(requestHeader, user_agent);
-            // printf("requestHeader = %s\n", requestHeader);
     	}
     	else if (!strcmp("Acceptgent", index)) {
     		flags[ACCEPT] = 1;
     		strcat(requestHeader, accept1);
-            // printf("requestHeader = %s\n", requestHeader);
     	}
     	else if (!strcmp("Accept-Encoding", index)) {
     		flags[ACCEPT_ENCODING] = 1;
-
     		strcat(requestHeader, accept_encoding);
-            // printf("requestHeader = %s\n", requestHeader);
     	}
     	else if (!strcmp("Connection", index)) {
     		flags[CONNECTION] = 1;
-
     		strcat(requestHeader, connection);
-            // printf("requestHeader = %s\n", requestHeader);
     	}
     	else if (!strcmp("Proxy-Connection", index)) {
     		flags[PROXY_CONNECTION] = 1;
-
     		strcat(requestHeader, proxy_connection);
-            // printf("requestHeader = %s\n", requestHeader);
     	}
     	else  {
-
     		strcat(requestHeader, buf1);
-            // printf("requestHeader = %s\n", requestHeader);
     	}
 
-    	memset(buf1, 0, strlen(buf1));
-    	rio_readlineb(&rio1, buf1, MAXLINE);
+    	memset(buf1, 0, sizeof(buf1));
+    	if ((n = rio_readlineb(&rio1, buf1, MAXLINE)) < 0 )
+            return;
     }
 
-    printf("after while\n");
-
-    memset(buf1, 0, strlen(buf1));
-
-    printf("flags %d %d %d %d %d %d\n", flags[0], flags[1], flags[2], flags[3], flags[4], flags[5]);
+    memset(buf1, 0, sizeof(buf1));
 
     if (!flags[HOST]) {
     	strcat(buf1, "Host: ");
     	strcat(buf1, hostname);
         strcat(buf1, "\r\n");
-        // printf("buf1 in flags[0] = %s\n", buf1);
-        // printf("%d + %d = %d\n", (int)strlen(requestHeader), (int)strlen(buf1), (int)(strlen(requestHeader) + strlen(buf1)));
     	strcat(requestHeader, buf1);
-
-        // printf("requestHeader = %s\n", requestHeader);
     }
     if (!flags[USER_AGENT]) {
     
     	strcat(requestHeader, user_agent);
-        // printf("requestHeader = %s\n", requestHeader);
     }
     if (!flags[ACCEPT]) {
 
     	strcat(requestHeader, accept1);
-        // printf("requestHeader = %s\n", requestHeader);
     }
     if (!flags[ACCEPT_ENCODING]) {
 
     	strcat(requestHeader, accept_encoding);
-        // printf("requestHeader = %s\n", requestHeader);
     }
     if (!flags[CONNECTION]) {
 
     	strcat(requestHeader, connection);
-        // printf("requestHeader = %s\n", requestHeader);
     }
     if (!flags[PROXY_CONNECTION]) {
-
     	strcat(requestHeader, proxy_connection);
-        // printf("requestHeader = %s\n", requestHeader);
     }
 
 
@@ -249,8 +211,10 @@ void doit(int fd)
 
     strcat(requestHeader, "\r\n");
 
-	rio_writen(clientfd, request, strlen(request));
-    rio_writen(clientfd, requestHeader, strlen(requestHeader));
+	if ((n = rio_writen(clientfd, request, strlen(request))) < 0)
+        return;
+    if ((n = rio_writen(clientfd, requestHeader, strlen(requestHeader))) < 0)
+        return;
 
     rio_readinitb(&rio2, clientfd); 
 
@@ -259,6 +223,8 @@ void doit(int fd)
         memset(buf2, 0, sizeof(buf2));
         
     }
+    if (n < 0)
+        return;
 
     Close(clientfd);
     reinitial(buf1, buf2, method, uri, uriForward, hostname, request, index, requestHeader);
