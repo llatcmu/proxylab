@@ -95,8 +95,8 @@ void doit(int fd)
 	char buf1[MAXLINE] = {0}, buf2[MAXLINE] = {0}, method[MAXLINE] = {0}, uri[MAXLINE] = {0};
 	char uriForward[MAXLINE] = {0}, hostname[MAXLINE] = {0};
 	char request[MAXLINE] = {0}, index[MAXLINE] = {0};
-	char requestHeader[MAX_OBJECT_SIZE];
-    char *p, cacheBuffer;
+	char requestHeader[MAX_OBJECT_SIZE], cacheBuffer[MAX_OBJECT_SIZE];
+    char *p, cachePoint;
 	int n, clientfd, serverport = 80;
 	int flags[6] = {0, 0, 0, 0, 0, 0};
 	const char *get = "GET ";
@@ -113,13 +113,13 @@ void doit(int fd)
         return;
     }
 
-    if (get_webobj_from(uri, buf1) != NULL) {
+    if (get_webobj_from(uri, cacheBuffer) != NULL) {
         get_buf_for_webobj(uri);
-        if ((rio_writen(fd, buf1, strlen(buf1))) < 0) {
+        if ((rio_writen(fd, cacheBuffer, strlen(cacheBuffer))) < 0) {
             printf("written error.\n");
             return;
         }
-        memset(buf1, 0, sizeof(buf1));
+        memset(cacheBuffer, 0, sizeof(cacheBuffer));
         return;
     }
 
@@ -231,8 +231,8 @@ void doit(int fd)
 
     while ((n = rio_readlineb(&rio2, buf2, MAXLINE)) > 0) {
     	rio_writen(fd, buf2, n);
-        cacheBuffer = get_buf_for_webobj(uri);
-        cacheBuffer = stpcpy(cacheBuffer, buf2);
+        cachePoint = get_buf_for_webobj(uri);
+        cachePoint = stpcpy(cachePoint, buf2);
         memset(buf2, 0, sizeof(buf2));        
     }
     if (n < 0)
