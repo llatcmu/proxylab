@@ -22,6 +22,7 @@
 typedef struct {
 	int is_valid;
 	int timestamp;
+	int obj_length;
     char *uri_key ;		/* use uri as key of the cache */
     char *webobj_buf;   /* pointer to the cached obj */
 } linePCache;
@@ -30,8 +31,8 @@ void init_cache();
 
 /* Exposed interfaces */
 int is_cached(char *uri_in);
-char* get_webobj_from(char *uri_in, char *buf1);
-char* get_buf_for_webobj(char *uri_in);
+int get_webobj_from(char *uri_in, char *cached_obj_out);
+int set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in);
 
 /* Internal helpers*/
  

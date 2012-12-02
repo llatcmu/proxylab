@@ -57,7 +57,7 @@ int is_cached(char *uri_in){
     return 0;
 }
 
-char* get_webobj_from(char *uri_in, char *buf1){
+int get_webobj_from(char *uri_in, char *cached_obj_out) {
 
 	int i;
 
@@ -65,8 +65,8 @@ char* get_webobj_from(char *uri_in, char *buf1){
 	if (centralCache == NULL)
 	{
 		init_cache();
-		buf1 = NULL;
-		return NULL;
+		cached_obj_out = NULL;
+		return 0;
 	}
 
 	timeline ++;
@@ -76,10 +76,10 @@ char* get_webobj_from(char *uri_in, char *buf1){
 			if (strcmp(centralCache[i].uri_key, uri_in) == 0) {
 				//Found the matching uri
 				centralCache[i].timestamp = timeline;
-				buf1 = centralCache[i].webobj_buf;
+				cached_obj_out = centralCache[i].webobj_buf;
 
 				dbg_printf("********Found in cache!**********\n");
-				return centralCache[i].webobj_buf;
+				return centralCache[i].obj_length;
             }
         }
         else {
@@ -87,18 +87,18 @@ char* get_webobj_from(char *uri_in, char *buf1){
         	//We've iterated through all cached lines
         	has_empty_line = 1;
             empty_line_number = i;
-            buf1 = NULL;
+            cached_obj_out = NULL;
             dbg_printf("********Still have empty lines!!**********\n");
 
-        	return NOT_FOUND;
+        	return 0;
         }
     }
     dbg_printf("[out get_webobj_from]*********NOT_FOUND******\n");
-    buf1 = NULL;
-    return NOT_FOUND;
+    cached_obj_out = NULL;
+    return 0;
 }
 
-char* get_buf_for_webobj(char *uri_in){
+int set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in) {
 
 	int smallest_timestamp;
 	int ret_line_num = 0;
@@ -119,15 +119,16 @@ char* get_buf_for_webobj(char *uri_in){
 		/* Initializing a cache line */
 		centralCache[empty_line_number].is_valid = 1;
 		centralCache[empty_line_number].timestamp = timeline;
+		centralCache[empty_line_number].obj_length = obj_length_in;
 		centralCache[empty_line_number].uri_key = Malloc(MAXLINE);
 		strcpy(centralCache[empty_line_number].uri_key, uri_in);
 
-		centralCache[empty_line_number].webobj_buf = Malloc(MAX_OBJECT_SIZE);
+		centralCache[empty_line_number].webobj_buf = webobj_in;
 
 		dbg_printf("[in get_buf_for_webobj]*******insert into cache******\n");
 		has_empty_line = 0;
 		empty_line_number = 0;
-		return centralCache[empty_line_number].webobj_buf;
+		return 1;
 	}
 	else {
 		for (i = 0; i < number_of_sets; i++) {
@@ -149,15 +150,16 @@ char* get_buf_for_webobj(char *uri_in){
 
     	dbg_printf("[in get_buf_for_webobj]*******start replace******\n");
    		centralCache[ret_line_num].timestamp = timeline;
+   		centralCache[ret_line_num].obj_length = obj_length_in;
 		strcpy(centralCache[ret_line_num].uri_key, uri_in);
 
-		centralCache[ret_line_num].webobj_buf = Malloc(MAX_OBJECT_SIZE);
+		centralCache[ret_line_num].webobj_buf = webobj_in;
 		dbg_printf("[in get_buf_for_webobj]*******replaced cacheline******\n");
-		return centralCache[ret_line_num].webobj_buf;
+		return 1;
 	}
 
 	dbg_printf("[in get_buf_for_webobj]*************\n");
-	return NULL;
+	return 0;
 }
 
 /* Internal helpers*/
