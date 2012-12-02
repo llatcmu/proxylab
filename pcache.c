@@ -17,151 +17,228 @@
 # define dbg_printf(...)
 #endif
 
-static linePCache *centralCache;
-
-int number_of_sets = MAX_CACHE_SIZE / MAX_OBJECT_SIZE;
-static int has_empty_line;
-static int empty_line_number;
-static unsigned int timeline;
+static linePCache *cache_head = NULL;
+static linePCache *cache_tail = NULL;
+static unsigned remain_cache_size = MAX_CACHE_SIZE;
 
 void init_cache(){
-	centralCache = Malloc(sizeof(linePCache *) * number_of_sets);
+	cache_head = NULL;
+	cache_tail = NULL;
 }
 
 /* Exposed interfaces */
-int is_cached(char *uri_in){
 
-	int i;
+linePCache* get_webobj_from(char *uri_in) {
 
-	if (centralCache == NULL)
-	{
-		init_cache();
-		return 0;
-	}
-
-	for (i = 0; i < number_of_sets; i++) {
-       //Iterate through all the lines
-		if(centralCache[i].is_valid){
-			if (strcmp(centralCache[i].uri_key, uri_in) == 0) {
-				//Found the matching uri
-				return FOUND;
-            }
-        }
-        else {
-        	//When we encounter an invalid line
-        	//We've iterated through all cached lines
-        	return 0;
-        }
-    }
-
-    return 0;
-}
-
-int get_webobj_from(char *uri_in, char *cached_obj_out) {
-
-	int i;
-
+	linePCache *current_line;
+	
 	dbg_printf("[in get_webobj_from]**************\n");
-	if (centralCache == NULL)
-	{
-		init_cache();
-		cached_obj_out = NULL;
-		return 0;
+	
+	current_line = cache_head;
+
+	while (current_line != NULL) {
+		if (strcmp(current_line->uri_key, uri_in) == 0)
+		{
+			dbg_printf("[in get_webobj_from] Found in cache\n");
+			put_line_to_head(current_line);
+			return current_line;
+		}
+		current_line = current_line->next_line;
 	}
 
-	timeline ++;
-	for (i = 0; i < number_of_sets; i++) {
-       //Iterate through all the lines
-		if(centralCache[i].is_valid){
-			if (strcmp(centralCache[i].uri_key, uri_in) == 0) {
-				//Found the matching uri
-				centralCache[i].timestamp = timeline;
-				cached_obj_out = centralCache[i].webobj_buf;
-
-				dbg_printf("********Found in cache!**********\n");
-				return centralCache[i].obj_length;
-            }
-        }
-        else {
-        	//When we encounter an invalid line
-        	//We've iterated through all cached lines
-        	has_empty_line = 1;
-            empty_line_number = i;
-            cached_obj_out = NULL;
-            dbg_printf("********Still have empty lines!!**********\n");
-
-        	return 0;
-        }
-    }
-    dbg_printf("[out get_webobj_from]*********NOT_FOUND******\n");
-    cached_obj_out = NULL;
-    return 0;
+	dbg_printf("[out get_webobj_from] NOT_FOUND \n");
+	return NULL;
 }
 
-int set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in) {
+linePCache* set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in) {
 
-	int smallest_timestamp;
-	int ret_line_num = 0;
-	int i;
+	linePCache *new_line;
 
-	dbg_printf("[in get_buf_for_webobj]*************\n");
-	if (centralCache == NULL)
+	dbg_printf("[in set_webobj_to]uri: %s, webobj: %s\n", uri_in, webobj_in);
+	
+	//Create a new line
+	new_line = Malloc(sizeof(linePCache));
+	new_line->obj_length = obj_length_in;
+	new_line->prev_line = NULL;
+	new_line->next_line = NULL;
+
+	new_line->uri_key = Malloc(strlen(uri_in));
+	strcpy(new_line->uri_key, uri_in);
+	
+	new_line->webobj_buf = webobj_in;
+
+	if (remain_cache_size < obj_length_in)
 	{
-		init_cache();
+		//Not enough room, eviction
+		evict_lines_for_size(obj_length_in);
 	}
+	
+	remain_cache_size -= obj_length_in;
+	add_new_line(new_line);
 
-	timeline ++;
-	smallest_timestamp = timeline;
-
-
-	if (has_empty_line)
-	{
-		/* Initializing a cache line */
-		centralCache[empty_line_number].is_valid = 1;
-		centralCache[empty_line_number].timestamp = timeline;
-		centralCache[empty_line_number].obj_length = obj_length_in;
-		centralCache[empty_line_number].uri_key = Malloc(MAXLINE);
-		strcpy(centralCache[empty_line_number].uri_key, uri_in);
-
-		centralCache[empty_line_number].webobj_buf = webobj_in;
-
-		dbg_printf("[in get_buf_for_webobj]*******insert into cache******\n");
-		has_empty_line = 0;
-		empty_line_number = 0;
-		return 1;
-	}
-	else {
-		for (i = 0; i < number_of_sets; i++) {
-       		//Iterate through all the lines
-			if(centralCache[i].is_valid){
-				if (centralCache[i].timestamp < smallest_timestamp) {
-					//Found smaller timestamp
-					smallest_timestamp = centralCache[i].timestamp;
-					ret_line_num = i;
-            	}
-        	}
-        	else {
-        		//When we encounter an invalid line
-        		//We've iterated through all cached lines
-        		has_empty_line = 1;
-            	empty_line_number = i;
-        	}
-    	}
-
-    	dbg_printf("[in get_buf_for_webobj]*******start replace******\n");
-   		centralCache[ret_line_num].timestamp = timeline;
-   		centralCache[ret_line_num].obj_length = obj_length_in;
-		strcpy(centralCache[ret_line_num].uri_key, uri_in);
-
-		centralCache[ret_line_num].webobj_buf = webobj_in;
-		dbg_printf("[in get_buf_for_webobj]*******replaced cacheline******\n");
-		return 1;
-	}
-
-	dbg_printf("[in get_buf_for_webobj]*************\n");
-	return 0;
+	return new_line;
 }
 
 /* Internal helpers*/
  
+void put_line_to_head(linePCache *new_head) {
+	// Remove line from list
+	linePCache *old_prev_line = new_head->prev_line;
+	linePCache *old_next_line = new_head->next_line;
+
+	if (old_prev_line == NULL)
+	{
+		// The line is already the head
+		// So we don't need to do anything
+		return;
+	}
+	else 
+	{
+		old_prev_line->next_line = old_next_line;
+	}
+
+	if (old_next_line == NULL)
+	{
+		/* The line is the tail */
+		// renew the tail pointer
+		cache_tail = old_prev_line;
+	}
+	else
+	{
+		old_next_line->prev_line = old_prev_line;
+	}
+
+	// Insert the new head
+	new_head->next_line = cache_head;
+	new_head->prev_line = NULL;
+	cache_head->prev_line = new_head;
+	cache_head = new_head;
+
+	return;
+}
+
+void add_new_line(linePCache *new_line)
+{
+	if (cache_head == NULL)
+	{
+		cache_head = new_line;
+		if (cache_tail == NULL)
+		{
+			cache_tail = new_line;
+		}
+	}
+	else
+	{
+		new_line->next_line = cache_head;
+		cache_head->prev_line = new_line;
+		cache_head = new_line;
+	}
+
+	return;
+}
+
+
+void evict_lines_for_size(int needed_size)
+{
+	linePCache *current_line;
+	int tmp_size;
+
+	current_line = cache_tail;
+
+	while (current_line != NULL)
+	{
+		tmp_size = current_line->obj_length + remain_cache_size;
+		if (tmp_size > needed_size)
+		{
+			remove_line(current_line);
+			free_line(current_line);
+			return;
+		}
+		else current_line = current_line->prev_line;
+	}
+
+	//Means no line is big enough
+	//So we evict cachelines from the tail one
+	//by one until we have enough space
+	current_line = cache_tail;
+
+	while (remain_cache_size < needed_size)
+	{
+		remain_cache_size += current_line->obj_length;
+		remove_line(current_line);
+		free_line(current_line);
+	}
+
+	//Now the cache would have enough space
+	return;
+}
+
+/* Line Operations */
+void remove_line(linePCache *line)
+{
+	// Remove line from list
+	linePCache *old_prev_line = line->prev_line;
+	linePCache *old_next_line = line->next_line;
+
+	if (old_prev_line == NULL)
+	{
+		// The line is the head
+		// So we move the head
+		cache_head = old_next_line;
+	}
+	else 
+	{
+		old_prev_line->next_line = old_next_line;
+	}
+
+	if (old_next_line == NULL)
+	{
+		/* The line is the tail */
+		// renew the tail pointer
+		cache_tail = old_prev_line;
+	}
+	else
+	{
+		old_next_line->prev_line = old_prev_line;
+	}
+}
+
+void free_line(linePCache *line)
+{
+	Free(line->uri_key);
+	Free(line->webobj_buf);
+	Free(line);
+}
+
+/* Internal Test cases */
+int test_cache() 
+{	
+	char *uri_arr[6] = {"abcabc","aaaaaa","abcabc","eeeeee","dddddd","abcabc"};
+	char *webobj_arr[6] = {"111111","123123","123123","222222","123123","123123"};
+
+	int n = 6;
+	int i;
+	linePCache *obj_from_cache;
+
+	init_cache();
+	for (i = 0; i < n; ++i)
+	{
+		obj_from_cache = get_webobj_from(uri_arr[i]);
+		if (obj_from_cache == NULL)
+		{
+			//NOT Found
+			set_webobj_to(uri_arr[i],webobj_arr[i],6);
+		}
+		else{
+			dbg_printf("Found: %s\n", obj_from_cache->webobj_buf);
+		}
+	}
+
+	return 1;
+
+}
+
+
+
+
 /* $end pcache.c */
