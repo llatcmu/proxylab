@@ -5,6 +5,13 @@
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
 
+#define HOST             0
+#define USER_AGENT       1
+#define ACCEPT           2
+#define ACCEPT_ENCODING  3
+#define CONNECTION       4
+#define PROXY_CONNECTION 5
+
 static const char *user_agent = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
 static const char *accept1 = "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n";
 static const char *accept_encoding = "Accept-Encoding: gzip, deflate\r\n";
@@ -41,6 +48,7 @@ void reinitial(char *buf1, char *buf2, char *method, char *uri, char *uriForward
 int getport(char *uriForward) 
 {
 	int port  = 80;
+
     return port;
 
 }
@@ -96,7 +104,7 @@ void doit(int fd)
 	char request[MAXLINE] = {0}, index[MAXLINE] = {0};
 	char requestHeader[MAX_OBJECT_SIZE];
     char *p;
-	int clientfd, serverport;
+	int n, clientfd, serverport = 80;
 	int flags[6] = {0, 0, 0, 0, 0, 0};
 	const char *get = "GET ";
 	const char *version = " HTTP/1.0\r\n";
@@ -107,7 +115,7 @@ void doit(int fd)
 
     if (!strlen(buf1))
         return;
-    
+
 	sscanf(buf1, "%s %s", method, uri);
 
     printf("method = %s, uri = %s n = %d\n", method, uri, getHostname(uri));
@@ -119,11 +127,14 @@ void doit(int fd)
     p = memchr(hostname, '/', strlen(hostname));
     p = memchr(p + 1, '/', strlen(hostname));
     strcpy(hostname, p + 1);
+    if ((p = memchr(hostname, ':', strlen(hostname))) != NULL) {
+        serverport = atoi(p + 1);
+        strtok(hostname, ":");
+    }
 
-	strcpy(uriForward, ((char *)uri + getHostname(uri)));
-	serverport = getport(uri);
+	strcpy(uriForward, uri + getHostname(uri));
 
-    printf("hostname = %s, length = %d, uriForward = %s\n", hostname, (int)strlen(hostname), uriForward);
+    printf("hostname = %s, serverport = %d, length = %d, uriForward = %s\n", hostname, serverport, (int)strlen(hostname), uriForward);
 
     strcat(request, get);
 	strcat(request, uriForward);
@@ -143,45 +154,44 @@ void doit(int fd)
         printf("index = %s\n", index);
     	
     	if (!strcmp("Host", index)) {
-    		flags[0] = 1;
+    		flags[HOST] = 1;
 
     		strcat(requestHeader, buf1);
-            printf("requestHeader = %s\n", requestHeader);
+            // printf("requestHeader = %s\n", requestHeader);
     	}
     	else if (!strcmp("User-Agent", index)) {
-    		flags[1] = 1;
+    		flags[USER_AGENT] = 1;
 
     		strcat(requestHeader, user_agent);
-            printf("requestHeader = %s\n", requestHeader);
+            // printf("requestHeader = %s\n", requestHeader);
     	}
-    	else if (!strcmp("Accept", index)) {
-    		flags[2] = 1;
-
+    	else if (!strcmp("Acceptgent", index)) {
+    		flags[ACCEPT] = 1;
     		strcat(requestHeader, accept1);
-            printf("requestHeader = %s\n", requestHeader);
+            // printf("requestHeader = %s\n", requestHeader);
     	}
     	else if (!strcmp("Accept-Encoding", index)) {
-    		flags[3] = 1;
+    		flags[ACCEPT_ENCODING] = 1;
 
     		strcat(requestHeader, accept_encoding);
-            printf("requestHeader = %s\n", requestHeader);
+            // printf("requestHeader = %s\n", requestHeader);
     	}
     	else if (!strcmp("Connection", index)) {
-    		flags[4] = 1;
+    		flags[CONNECTION] = 1;
 
     		strcat(requestHeader, connection);
-            printf("requestHeader = %s\n", requestHeader);
+            // printf("requestHeader = %s\n", requestHeader);
     	}
     	else if (!strcmp("Proxy-Connection", index)) {
-    		flags[5] = 1;
+    		flags[PROXY_CONNECTION] = 1;
 
     		strcat(requestHeader, proxy_connection);
-            printf("requestHeader = %s\n", requestHeader);
+            // printf("requestHeader = %s\n", requestHeader);
     	}
     	else  {
 
     		strcat(requestHeader, buf1);
-            printf("requestHeader = %s\n", requestHeader);
+            // printf("requestHeader = %s\n", requestHeader);
     	}
 
     	memset(buf1, 0, strlen(buf1));
@@ -194,44 +204,44 @@ void doit(int fd)
 
     printf("flags %d %d %d %d %d %d\n", flags[0], flags[1], flags[2], flags[3], flags[4], flags[5]);
 
-    if (!flags[0]) {
+    if (!flags[HOST]) {
     	strcat(buf1, "Host: ");
     	strcat(buf1, hostname);
         strcat(buf1, "\r\n");
-        printf("buf1 in flags[0] = %s\n", buf1);
-        printf("%d + %d = %d\n", (int)strlen(requestHeader), (int)strlen(buf1), (int)(strlen(requestHeader) + strlen(buf1)));
+        // printf("buf1 in flags[0] = %s\n", buf1);
+        // printf("%d + %d = %d\n", (int)strlen(requestHeader), (int)strlen(buf1), (int)(strlen(requestHeader) + strlen(buf1)));
     	strcat(requestHeader, buf1);
 
-        printf("requestHeader = %s\n", requestHeader);
+        // printf("requestHeader = %s\n", requestHeader);
     }
-    if (!flags[1]) {
+    if (!flags[USER_AGENT]) {
     
     	strcat(requestHeader, user_agent);
-        printf("requestHeader = %s\n", requestHeader);
+        // printf("requestHeader = %s\n", requestHeader);
     }
-    if (!flags[2]) {
+    if (!flags[ACCEPT]) {
 
     	strcat(requestHeader, accept1);
-        printf("requestHeader = %s\n", requestHeader);
+        // printf("requestHeader = %s\n", requestHeader);
     }
-    if (!flags[3]) {
+    if (!flags[ACCEPT_ENCODING]) {
 
     	strcat(requestHeader, accept_encoding);
-        printf("requestHeader = %s\n", requestHeader);
+        // printf("requestHeader = %s\n", requestHeader);
     }
-    if (!flags[4]) {
+    if (!flags[CONNECTION]) {
 
     	strcat(requestHeader, connection);
-        printf("requestHeader = %s\n", requestHeader);
+        // printf("requestHeader = %s\n", requestHeader);
     }
-    if (!flags[5]) {
+    if (!flags[PROXY_CONNECTION]) {
 
     	strcat(requestHeader, proxy_connection);
-        printf("requestHeader = %s\n", requestHeader);
+        // printf("requestHeader = %s\n", requestHeader);
     }
 
 
-    printf("%s%s\nhostlen: %u\n", request, requestHeader, strlen(hostname));
+    printf("%s%s\n", request, requestHeader);
 
 	clientfd = open_clientfd(hostname, serverport);
 
@@ -242,14 +252,12 @@ void doit(int fd)
 	rio_writen(clientfd, request, strlen(request));
     rio_writen(clientfd, requestHeader, strlen(requestHeader));
 
-    printf("after written\n");
-
     rio_readinitb(&rio2, clientfd); 
 
-    printf("after initialazition\n");
-
-    while (rio_readlineb(&rio2, buf2, MAXLINE) > 0) {
-    	rio_writen(fd, buf2, strlen(buf2));
+    while ((n = rio_readlineb(&rio2, buf2, MAXLINE)) > 0) {
+    	rio_writen(fd, buf2, n);
+        memset(buf2, 0, sizeof(buf2));
+        
     }
 
     Close(clientfd);
