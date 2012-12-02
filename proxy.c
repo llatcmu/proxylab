@@ -20,7 +20,7 @@ static const char *connection = "Connection: close\r\n";
 static const char *proxy_connection = "Proxy-Connection: close\r\n";
 
 
-
+unsigned int getPacketLength(char *buf2);
 unsigned int getHostname(char *uri);
 void *getIndex(char *p, char *index);
 void doit(int fd);
@@ -44,7 +44,19 @@ void reinitial(char *buf1, char *buf2, char *method, char *uri, char *uriForward
 
 }
 
-
+unsigned int getPacketLength(char *buf2) 
+{
+    char index[MAXLINE] = {0};
+    char *length;
+    getIndex(buf2, index);
+    if (!strcmp(index, "Content-Length")) {
+        strchr(buf2, ':', strlen(buf2));
+        strcpy(length, buf2 + 2);
+        return atoi(length);
+    }
+    else
+        return 0;
+}
 
 unsigned int getHostname(char *uri) 
 {
@@ -95,8 +107,8 @@ void doit(int fd)
 	char buf1[MAXLINE] = {0}, buf2[MAXLINE] = {0}, method[MAXLINE] = {0}, uri[MAXLINE] = {0};
 	char uriForward[MAXLINE] = {0}, hostname[MAXLINE] = {0};
 	char request[MAXLINE] = {0}, index[MAXLINE] = {0};
-	char requestHeader[MAX_OBJECT_SIZE], cacheBuffer[MAX_OBJECT_SIZE];
-    char *p, cachePoint;
+	char requestHeader[MAX_OBJECT_SIZE];
+    char *p, *cachePoint, *cacheBuffer;
 	int n, clientfd, serverport = 80;
 	int flags[6] = {0, 0, 0, 0, 0, 0};
 	const char *get = "GET ";
@@ -114,7 +126,6 @@ void doit(int fd)
     }
 
     if (get_webobj_from(uri, cacheBuffer) != NULL) {
-        get_buf_for_webobj(uri);
         if ((rio_writen(fd, cacheBuffer, strlen(cacheBuffer))) < 0) {
             printf("written error.\n");
             return;
@@ -229,12 +240,36 @@ void doit(int fd)
 
     rio_readinitb(&rio2, clientfd); 
 
+    char *tmpWebObject;
+    tmpWebObject = Malloc(MAX_OBJECT_SIZE);
+
     while ((n = rio_readlineb(&rio2, buf2, MAXLINE)) > 0) {
-    	rio_writen(fd, buf2, n);
-        cachePoint = get_buf_for_webobj(uri);
-        cachePoint = stpcpy(cachePoint, buf2);
+        rio_writen(fd, buf2, n);
+        length = getPacketLength(buf2);
+        
+        if (length > MAX_OBJECT_SIZE) {
+            should_discard_obj = 1;
+        }
+        else if (length != 0) {
+            packetLength = length;
+        }
+
+        if (!should_discard_obj) {
+            tmpWebObject = stpcpy(tmpWebObject, buf2);
+        }
         memset(buf2, 0, sizeof(buf2));        
     }
+    
+
+    if (should_discard_obj)
+    {
+        /* nothing */
+    }
+    else {
+
+    }
+
+
     if (n < 0)
         return;
 
@@ -259,8 +294,8 @@ int main(int argc, char **argv)
 	port = atoi(argv[1]);
 
     printf("port = %d\n", port);
-
 	listenfd = Open_listenfd(port);
+    signal(SIGPIPE, SIG_IGN);
 	while (1) {
 		clientlen = sizeof(clientaddr);
 		connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
