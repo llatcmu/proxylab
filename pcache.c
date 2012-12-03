@@ -167,6 +167,7 @@ void evict_lines_for_size(int needed_size)
 		remain_cache_size += current_line->obj_length;
 		remove_line(current_line);
 		free_line(current_line);
+		current_line = cache_tail;
 	}
 
 	//Now the cache would have enough space
