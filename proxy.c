@@ -3,7 +3,7 @@
 #include "csapp.h"
 #include "pcache.h"
 
-#define MAX_CACHE_SIZE  110000
+#define MAX_CACHE_SIZE  1049000
 #define MAX_OBJECT_SIZE 102400
 
 #define HOST             0
@@ -132,18 +132,21 @@ void doit(int fd)
 
     dbg_printf("go into lock\n");
 
-    //pthread_rwlock_wrlock(&rwlock);
-    P(&cache_mutex);
+    pthread_rwlock_rdlock(&rwlock);
+    //P(&cache_mutex);
 
     dbg_printf("start get/write\n");
     cacheLine = get_webobj_from(uri);
     dbg_printf("end get/write\n");
-    //pthread_rwlock_unlock(&rwlock);
+    pthread_rwlock_unlock(&rwlock);
 
-    V(&cache_mutex);
+    //V(&cache_mutex);
     dbg_printf("out of lock\n");
 
     if (cacheLine != NULL) {
+        pthread_rwlock_wrlock(&rwlock);
+        update_cache(cacheLine);
+        pthread_rwlock_unlock(&rwlock);
         cacheBuffer = cacheLine->webobj_buf;
         dbg_printf("cache not NULL, size: %d\n", cacheLine->obj_length);
         dbg_printf("Sizeof return value: %lu\n", sizeof(cacheBuffer));
@@ -189,11 +192,9 @@ void doit(int fd)
         dbg_printf("datasize: %d\n", datasize);
 
         if (datasize < MAX_OBJECT_SIZE) {
-            //dbg_printf("before memcpy, from %p, to %p", buf2, cachePoint);
-            //memcpy(cachePoint, buf2, datasize);
-            P(&cache_mutex);
+            pthread_rwlock_wrlock(&rwlock);
             set_webobj_to(uri, buf2, datasize);
-            V(&cache_mutex);
+            pthread_rwlock_unlock(&rwlock);
         }
 
         if (n < 0) {
