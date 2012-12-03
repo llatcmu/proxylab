@@ -32,7 +32,7 @@ linePCache* get_webobj_from(char *uri_in) {
 
 	linePCache *current_line;
 	
-	dbg_printf("[in get_webobj_from]**************\n");
+	dbg_printf("[in get_webobj_from]uri: %s\n", uri_in);
 	
 	current_line = cache_head;
 
@@ -53,27 +53,41 @@ linePCache* get_webobj_from(char *uri_in) {
 linePCache* set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in) {
 
 	linePCache *new_line;
+	int obj_size = obj_length_in;
 
-	dbg_printf("[in set_webobj_to]uri: %s, webobj: %s\n", uri_in, webobj_in);
+	dbg_printf("[in set_webobj_to]uri: %s\n", uri_in);
 	
 	//Create a new line
+	dbg_printf("set 1\n");
 	new_line = Malloc(sizeof(linePCache));
-	new_line->obj_length = obj_length_in;
+	dbg_printf("set 2\n");
+	new_line->obj_length = obj_size;
+	dbg_printf("set 3\n");
 	new_line->prev_line = NULL;
+	dbg_printf("set 4\n");
 	new_line->next_line = NULL;
 
-	new_line->uri_key = Malloc(strlen(uri_in));
+	dbg_printf("set 5\n");
+	new_line->uri_key = Malloc(MAXLINE);
+	dbg_printf("uri_key: %p\n", new_line->uri_key);
 	strcpy(new_line->uri_key, uri_in);
 	
-	new_line->webobj_buf = webobj_in;
+	dbg_printf("set 6\n");
+	new_line->webobj_buf = Malloc(obj_size);
+	dbg_printf("webobj_buf: %p\n", new_line->webobj_buf);
+	memcpy(new_line->webobj_buf, webobj_in, obj_size);
+	dbg_printf("set 7\n");
 
-	if (remain_cache_size < obj_length_in)
+	printf("remain_cache_size = %d, obj_length_in = %d\n", remain_cache_size, obj_size);
+
+	if (remain_cache_size < obj_size)
 	{
+		printf("have_not_enough_space\n");
 		//Not enough room, eviction
-		evict_lines_for_size(obj_length_in);
+		evict_lines_for_size(obj_size);
 	}
 	
-	remain_cache_size -= obj_length_in;
+	remain_cache_size -= obj_size;
 	add_new_line(new_line);
 
 	return new_line;
@@ -143,6 +157,8 @@ void evict_lines_for_size(int needed_size)
 	linePCache *current_line;
 	int tmp_size;
 
+	printf("in eviction function\n");
+
 	current_line = cache_tail;
 
 	while (current_line != NULL)
@@ -152,6 +168,7 @@ void evict_lines_for_size(int needed_size)
 		{
 			remove_line(current_line);
 			free_line(current_line);
+			remain_cache_size = tmp_size;
 			return;
 		}
 		else current_line = current_line->prev_line;
@@ -162,7 +179,8 @@ void evict_lines_for_size(int needed_size)
 	//by one until we have enough space
 	current_line = cache_tail;
 
-	while (remain_cache_size < needed_size)
+	while ((remain_cache_size < needed_size) 
+		&& (current_line != NULL))
 	{
 		remain_cache_size += current_line->obj_length;
 		remove_line(current_line);
@@ -206,9 +224,15 @@ void remove_line(linePCache *line)
 
 void free_line(linePCache *line)
 {
+	dbg_printf("[In Free]line:%p, uri_key:%p, webobj_buf:%p\n", line, line->uri_key, line->webobj_buf);
+	dbg_printf("uri_key: %s\n", line->uri_key);
 	Free(line->uri_key);
+	dbg_printf("uri_key freed\n");
 	Free(line->webobj_buf);
+	dbg_printf("webobj_buf freed\n");
+	dbg_printf("[In Free]prev_line:%p, next_line:%p\n", line->prev_line, line->next_line);
 	Free(line);
+	dbg_printf("line struct freed\n");
 }
 
 /* Internal Test cases */
