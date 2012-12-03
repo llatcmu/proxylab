@@ -138,7 +138,7 @@ void doit(int fd)
     dbg_printf("start get/write\n");
     cacheLine = get_webobj_from(uri);
     dbg_printf("end get/write\n");
-    //pthread_rwlock_unlock(&rwlock);
+    pthread_rwlock_unlock(&rwlock);
 
     V(&cache_mutex);
     dbg_printf("out of lock\n");
