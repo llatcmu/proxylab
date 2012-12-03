@@ -40,7 +40,6 @@ linePCache* get_webobj_from(char *uri_in) {
 		if (strcmp(current_line->uri_key, uri_in) == 0)
 		{
 			dbg_printf("[in get_webobj_from] Found in cache\n");
-			put_line_to_head(current_line);
 			return current_line;
 		}
 		current_line = current_line->next_line;
@@ -48,6 +47,10 @@ linePCache* get_webobj_from(char *uri_in) {
 
 	dbg_printf("[out get_webobj_from] NOT_FOUND \n");
 	return NULL;
+}
+
+void update_cache(linePCache* visited_line){
+	put_line_to_head(visited_line);
 }
 
 linePCache* set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in) {
