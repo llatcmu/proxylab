@@ -384,7 +384,7 @@ void *getIndex(char *p, char *index)
 void int_handler(int sig) 
 {
     printf("Exit\n");
-    // free_cache();
+    free_cache();
     exit(0);
 }
 

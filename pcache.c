@@ -8,86 +8,104 @@
 /* $begin pcache.c */
 #include "pcache.h"
 
-/* If you want debugging output, use the following macro.  When you hand
- * in, remove the #define DEBUG line. */
-#define DEBUG
+/* Macro printf for debugging*/
+#define DEBUGx
 #ifdef DEBUG
 # define dbg_printf(...) printf(__VA_ARGS__)
 #else
 # define dbg_printf(...)
 #endif
 
+// Global variables
 static linePCache *cache_head = NULL;
 static linePCache *cache_tail = NULL;
 static unsigned remain_cache_size = MAX_CACHE_SIZE;
 
-void init_cache(){
-	cache_head = NULL;
-	cache_tail = NULL;
-}
-
 /* Exposed interfaces */
 
+/*
+ * get_webobj_from
+ *
+ * provided interface for the proxy to find/retrieve data                      
+ * Using the uri of the request
+ * 
+ * INPUT:
+ * 	- uri_in: pointer to the uri, key for the search
+ *
+ * Returns pointer to the cache line if found
+ * Returns NULL if not found
+ */
 linePCache* get_webobj_from(char *uri_in) {
-	//Bet object from cache
+	
 	linePCache *current_line;
-	
-	dbg_printf("[in get_webobj_from]uri: %s\n", uri_in);
-	
 	current_line = cache_head;
 
+	//Traverse the cache from the head
 	while (current_line != NULL) {
 		if (strcmp(current_line->uri_key, uri_in) == 0)
 		{
-			dbg_printf("[in get_webobj_from] Found in cache\n");
+			//If found the matching key (uri)
+			//Move the founded line to the head
 			put_line_to_head(current_line);
+			//Return the founded line
 			return current_line;
 		}
 		current_line = current_line->next_line;
 	}
 
-	dbg_printf("[out get_webobj_from] NOT_FOUND \n");
+	//Not found, so return NULL
 	return NULL;
 }
 
+/*
+ * update_cache
+ *
+ * provided interface to update cache to achieve LRU
+ * 
+ * NOTE: Not used in current scheme, kept it for portability
+ */
 void update_cache(linePCache* visited_line){
 	put_line_to_head(visited_line);
 }
 
+
+/*
+ * get_webobj_from
+ *
+ * provided interface for the proxy to write new contents                      
+ * into the cache
+ * 
+ * INPUT:
+ * 	- uri_in: pointer to the uri, used as key for the new line
+ * 	- webobj_in: pointer to the content buffer
+ *				used to copy content to cache
+ *  - obj_length_in: integer, the size of the content
+ *
+ * Returns pointer to the newly created cache line
+ *
+ */
 linePCache* set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in) {
 
 	linePCache *new_line;
 	int obj_size = obj_length_in;
-
-	dbg_printf("[in set_webobj_to]uri: %s\n", uri_in);
 	
-	//Create a new line
-	dbg_printf("set 1\n");
+	//Create and initialize a new line
 	new_line = Malloc(sizeof(linePCache));
-	dbg_printf("set 2\n");
 	new_line->obj_length = obj_size;
-	dbg_printf("set 3\n");
 	new_line->prev_line = NULL;
-	dbg_printf("set 4\n");
 	new_line->next_line = NULL;
 
-	dbg_printf("set 5\n");
+	//Copy the uri into our cacheline as key
 	new_line->uri_key = Malloc(MAXLINE);
-	dbg_printf("uri_key: %p\n", new_line->uri_key);
 	strcpy(new_line->uri_key, uri_in);
-	
-	dbg_printf("set 6\n");
-	new_line->webobj_buf = Malloc(obj_size);
-	dbg_printf("webobj_buf: %p\n", new_line->webobj_buf);
-	memcpy(new_line->webobj_buf, webobj_in, obj_size);
-	dbg_printf("set 7\n");
 
-	printf("remain_cache_size = %d, obj_length_in = %d\n", remain_cache_size, obj_size);
+	//Copy the content into our buffer
+	new_line->webobj_buf = Malloc(obj_size);
+	memcpy(new_line->webobj_buf, webobj_in, obj_size);
 
 	if (remain_cache_size < obj_size)
 	{
-		printf("have_not_enough_space\n");
-		//Not enough room, eviction
+		//Not enough room, need to perform eviction
 		evict_lines_for_size(obj_size);
 	}
 	
@@ -95,6 +113,22 @@ linePCache* set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in) {
 	add_new_line(new_line);
 
 	return new_line;
+}
+
+/*
+ * free_cache
+ *
+ * provided interface to clean the entire cache
+ */
+void free_cache(){
+	linePCache *current_line = cache_head;
+
+	while (current_line != NULL)
+	{
+		cache_head = current_line->next_line;
+		free_line(current_line);
+		current_line = cache_head;
+	}
 }
 
 /* Internal helpers*/
@@ -136,6 +170,15 @@ void put_line_to_head(linePCache *new_head) {
 	return;
 }
 
+/*
+ * add_new_line
+ *
+ * [Internal Helper]
+ * Add a new cacheline to the head of the cache
+ * 
+ * INPUT:
+ * 	- new_line: pointer to the newline
+ */
 void add_new_line(linePCache *new_line)
 {
 	if (cache_head == NULL)
@@ -156,7 +199,16 @@ void add_new_line(linePCache *new_line)
 	return;
 }
 
-
+/*
+ * evict_lines_for_size
+ *
+ * [Internal Helper]
+ * Evict the lease recently used cachelines 
+ * Until we have enough space to accommandate the new line
+ *
+ * INPUT:
+ * 	- needed_size: integer, required buffer size for the new line
+ */
 void evict_lines_for_size(int needed_size)
 {
 	linePCache *current_line;
@@ -250,7 +302,6 @@ int test_cache()
 	int i;
 	linePCache *obj_from_cache;
 
-	init_cache();
 	for (i = 0; i < n; ++i)
 	{
 		obj_from_cache = get_webobj_from(uri_arr[i]);

@@ -27,12 +27,12 @@ typedef struct pcacheLine{
     int obj_length;
 } linePCache;
 
-void init_cache();
 
 /* Exposed interfaces */
 linePCache* get_webobj_from(char *uri_in);
 void update_cache(linePCache* visited_line);
 linePCache* set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in);
+void free_cache();
 
 /* Internal helpers*/
  
