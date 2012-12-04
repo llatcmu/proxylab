@@ -220,6 +220,10 @@ void doit(int fd)
 
 }
 
+/* 
+ * Besides the original, this modified function is just to 
+ * make sure the gethostbyname() function is thread safe.
+ */ 
 int open_clientfd_with_mutex(char *hostname, int port) 
 {
     int clientfd;
@@ -248,16 +252,23 @@ int open_clientfd_with_mutex(char *hostname, int port)
     return clientfd;
 }
 
+/* 
+ * This function is to parse the uri to generate the request to 
+ * the server.
+ */
 void *generate_request(char *request, char *uri, char *method, char *hostname,
                         int *serverport) 
 {
     char uriForward[MAXLINE];
     char *p; 
 
+    // parse to get the hostname
     strncpy(hostname, uri, getHostname(uri));
     p = memchr(hostname, '/', strlen(hostname));
     p = memchr(p + 1, '/', strlen(hostname));
     strcpy(hostname, p + 1);
+
+    // if the optional field port is exist, we need change the port number.
     if ((p = memchr(hostname, ':', strlen(hostname))) != NULL) {
         *serverport = atoi(p + 1);
         strtok(hostname, ":");
@@ -268,6 +279,7 @@ void *generate_request(char *request, char *uri, char *method, char *hostname,
     printf("hostname = %s, serverport = %d, uriForward = %s\n",
              hostname, *serverport, uriForward);
 
+    // merge the necessary parts to generate the request.
     memset(request, 0, sizeof(request));
     strcat(request, get);
     strcat(request, uriForward);
@@ -275,7 +287,9 @@ void *generate_request(char *request, char *uri, char *method, char *hostname,
 
     return request;
 }
-
+ /*
+  * This helper function is to generate the request header,
+  * if 
 int *generate_request_header(char *requestHeader, char *buf1, int *flags)
 {   
     char index[MAXLINE];
@@ -311,10 +325,14 @@ int *generate_request_header(char *requestHeader, char *buf1, int *flags)
     return flags;
 }
 
+/*
+ * This helper function is to ajust the request header which be 
+ * forwarded to server, to make sure the header include all the 
+ * necessary parts. 
+ */
 void *ajust_request_header(int *flags, char *hostname, char *requestHeader)
 {
     char buf1[MAXLINE];
-
     memset(buf1, 0, sizeof(buf1));
 
     if (!flags[HOST]) {
@@ -341,6 +359,10 @@ void *ajust_request_header(int *flags, char *hostname, char *requestHeader)
     return requestHeader;
 }
 
+/*
+ * This helper function is to find the end position of 
+ * hostname in uri.
+ */
 unsigned int getHostname(char *uri) 
 {
 	char *p = uri;
@@ -360,7 +382,10 @@ unsigned int getHostname(char *uri)
 	return (count - 1);
 }
 
-
+/*
+ * This helper function to determine the port number 
+ * is valid.
+ */   
 int validArg(char *p)
 {
 	int flag = 1;
@@ -375,6 +400,10 @@ int validArg(char *p)
 	return flag;
 }
 
+/*
+ * This helper function is to parse the 
+ * description of every request header.
+ */
 void *getIndex(char *p, char *index)
 {
 	index = memcpy(index, p, (strchr(p, ':') - p));
