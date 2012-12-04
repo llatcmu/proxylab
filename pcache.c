@@ -132,7 +132,6 @@ void free_cache(){
 }
 
 /* Internal helpers*/
- 
 void put_line_to_head(linePCache *new_head) {
 	dbg_printf("Updated Cache for LRU");
 	// Remove line from list
@@ -170,6 +169,60 @@ void put_line_to_head(linePCache *new_head) {
 	return;
 }
 
+
+/*
+ * evict_lines_for_size
+ *
+ * [Internal Helper]
+ * Evict the lease recently used cachelines 
+ * Until we have enough space to accommandate the new line
+ *
+ * INPUT:
+ * 	- needed_size: integer, required buffer size for the new line
+ */
+void evict_lines_for_size(int needed_size)
+{
+	linePCache *current_line;
+	int tmp_size;
+
+	//Traverse our cache from tail(Least Recent Used ones)
+	//Search for a line that's big enough until reached the head
+	current_line = cache_tail;
+
+	while (current_line != NULL)
+	{
+		tmp_size = current_line->obj_length + remain_cache_size;
+		if (tmp_size > needed_size)
+		{
+			remove_line(current_line);
+			free_line(current_line);
+			remain_cache_size = tmp_size;
+			return;
+		}
+		else current_line = current_line->prev_line;
+	}
+
+	//Reached the head
+	//Means no line is big enough
+	//So we evict cachelines from the tail one
+	//by one until we have enough space
+	current_line = cache_tail;
+
+	while ((remain_cache_size < needed_size) 
+		&& (current_line != NULL))
+	{
+		remain_cache_size += current_line->obj_length;
+		remove_line(current_line);
+		free_line(current_line);
+		current_line = cache_tail;
+	}
+
+	//Now the cache would have enough space
+	return;
+}
+
+/* Line Operations */
+
 /*
  * add_new_line
  *
@@ -200,66 +253,25 @@ void add_new_line(linePCache *new_line)
 }
 
 /*
- * evict_lines_for_size
+ * remove_line
  *
  * [Internal Helper]
- * Evict the lease recently used cachelines 
- * Until we have enough space to accommandate the new line
- *
+ * Remove a cacheline from the linked list
+ *  - Connects the previous and the next line
+ *  - isolate the current line
+ * 
  * INPUT:
- * 	- needed_size: integer, required buffer size for the new line
+ * 	- line: pointer to the line that need to be isolated
  */
-void evict_lines_for_size(int needed_size)
-{
-	linePCache *current_line;
-	int tmp_size;
-
-	printf("in eviction function\n");
-
-	current_line = cache_tail;
-
-	while (current_line != NULL)
-	{
-		tmp_size = current_line->obj_length + remain_cache_size;
-		if (tmp_size > needed_size)
-		{
-			remove_line(current_line);
-			free_line(current_line);
-			remain_cache_size = tmp_size;
-			return;
-		}
-		else current_line = current_line->prev_line;
-	}
-
-	//Means no line is big enough
-	//So we evict cachelines from the tail one
-	//by one until we have enough space
-	current_line = cache_tail;
-
-	while ((remain_cache_size < needed_size) 
-		&& (current_line != NULL))
-	{
-		remain_cache_size += current_line->obj_length;
-		remove_line(current_line);
-		free_line(current_line);
-		current_line = cache_tail;
-	}
-
-	//Now the cache would have enough space
-	return;
-}
-
-/* Line Operations */
 void remove_line(linePCache *line)
 {
-	// Remove line from list
 	linePCache *old_prev_line = line->prev_line;
 	linePCache *old_next_line = line->next_line;
 
 	if (old_prev_line == NULL)
 	{
 		// The line is the head
-		// So we move the head
+		// So we move the head to the next line
 		cache_head = old_next_line;
 	}
 	else 
@@ -279,17 +291,21 @@ void remove_line(linePCache *line)
 	}
 }
 
+/*
+ * free_line
+ *
+ * [Internal Helper]
+ * free the memory of a line
+ * 	- including the content buffer and they uri key buffer
+ * 
+ * INPUT:
+ * 	- line: pointer to the line to be freed
+ */
 void free_line(linePCache *line)
 {
-	dbg_printf("[In Free]line:%p, uri_key:%p, webobj_buf:%p\n", line, line->uri_key, line->webobj_buf);
-	dbg_printf("uri_key: %s\n", line->uri_key);
 	Free(line->uri_key);
-	dbg_printf("uri_key freed\n");
 	Free(line->webobj_buf);
-	dbg_printf("webobj_buf freed\n");
-	dbg_printf("[In Free]prev_line:%p, next_line:%p\n", line->prev_line, line->next_line);
 	Free(line);
-	dbg_printf("line struct freed\n");
 }
 
 /* Internal Test cases */
