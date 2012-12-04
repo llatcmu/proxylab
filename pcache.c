@@ -3,6 +3,15 @@
  *
  * Author: Bin Liu (bliu) & Lei Yan (leiyan)
  * implementation file for cache module
+ * 
+ * General Design Explanation:
+ * 	- The cache is organized in a double-linked list
+ *  - The head and tail pointers are global variables
+ *  - remain_cache_size is used to keep track of the size of our cache
+ *  - When adding a new entry, simply create a cacheline and
+ 		insert it to head, and also decrement remain_cache_size
+ *	- When accessing an entry, move that entry to head
+ *	- So that the sequence of the linked list represent a LRU pattern
  */
 
 /* $begin pcache.c */
@@ -309,10 +318,11 @@ void free_line(linePCache *line)
 }
 
 /* Internal Test cases */
+// Please skip this part :-)
 int test_cache() 
 {	
 	char *uri_arr[6] = {"abcabc","aaaaaa","abcabc","eeeeee","dddddd","abcabc"};
-	char *webobj_arr[6] = {"111111","123123","123123","222222","123123","123123"};
+	char *webobj_arr[6] = {"111111","123123","123123","222222","123123","123"};
 
 	int n = 6;
 	int i;

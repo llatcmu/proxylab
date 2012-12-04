@@ -20,8 +20,13 @@
 # define dbg_printf(...)
 #endif
 
-static const char *user_agent = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
-static const char *accept1 = "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n";
+//Sorry I cannot get this line under 80 characters
+static const char *user_agent = 
+"User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
+
+static const char *accept1 = 
+"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n";
+
 static const char *accept_encoding = "Accept-Encoding: gzip, deflate\r\n";
 static const char *connection = "Connection: close\r\n";
 static const char *proxy_connection = "Proxy-Connection: close\r\n";
@@ -31,8 +36,15 @@ static void *uri_error = "the request is not a valid URI\r\n";
 static void *method_error = "We only can deal with GET method.\r\n";
 
 sem_t mutex;
-sem_t LRU_mutex;
-pthread_rwlock_t rwlock;
+//get_set_rwlock is a read-write lock used when
+//concurrent threads are trying to read from and write to
+//the cache
+pthread_rwlock_t get_set_rwlock;
+
+//search_update_rwlock is also a read-write lock used when
+//concurrent threads are searching and then updating
+//the cache
+pthread_rwlock_t search_update_rwlock;
 
 void int_handler(int sig);
 int validArg(char *p);
@@ -43,9 +55,15 @@ void doit(int fd);
 int open_clientfd_with_mutex(char *hostname, int port);
 int *generate_request_header(char *requestHeader, char *buf1, int *flags);
 void *ajust_request_header(int *flags, char *hostname, char *requestHeader);
-void *generate_request(char *request, char *uri, char *method, char *hostname,
-                        int *serverport); 
+void *generate_request(char *request, char *uri, char *method, 
+                        char *hostname, int *serverport); 
 
+
+/*
+ * main
+ *
+ * Initialize file descriptors and all threads whenever there's a request
+ */
 int main(int argc, char **argv) 
 {   
 
@@ -74,8 +92,8 @@ int main(int argc, char **argv)
     Signal(SIGINT, int_handler);
     listenfd = Open_listenfd(port);
     sem_init(&mutex, 0, 1);
-    sem_init(&LRU_mutex, 0, 1);
-    pthread_rwlock_init(&rwlock, NULL);
+    pthread_rwlock_init(&get_set_rwlock, NULL);
+    pthread_rwlock_init(&search_update_rwlock, NULL);
 
     while (1) {
         clientlen = sizeof(clientaddr);
@@ -86,6 +104,11 @@ int main(int argc, char **argv)
     return 0;
 }
 
+/*
+ * thread
+ *
+ * Helper method used to determine the life cycle of a thread
+ */
 void *thread(void *vargp)
 {
     int connfd = *((int *)vargp);
@@ -96,6 +119,12 @@ void *thread(void *vargp)
     return NULL;
 }
 
+/*
+ * doit
+ *  - used the name from the textbook
+ * 
+ * Main function for proxy behaviors
+ */
 void doit(int fd) 
 {
     rio_t rio1, rio2;
@@ -156,30 +185,49 @@ void doit(int fd)
     strcat(request, requestHeader);
     strcat(request, "\r\n");
 
-    pthread_rwlock_rdlock(&rwlock);
+    //Protect the reading process so that multiple
+    //threads can read from cache simutaniously
+    pthread_rwlock_rdlock(&get_set_rwlock);
 
-    P(&LRU_mutex);
+    //Search the cache to see if the request is cached
+    //This process can be concurrent
+    //But has to be separated with updating LRU
+    //Therefore protected by a read lock
+    pthread_rwlock_rdlock(&search_update_rwlock);
     cacheLine = get_webobj_from(uri);
-    V(&LRU_mutex);
+    pthread_rwlock_unlock(&search_update_rwlock);
 
     if (cacheLine != NULL) {
-        cachePoint = cacheLine->webobj_buf;
-        dbg_printf("Get content from cache, size: %d\n", cacheLine->obj_length);
-     
+        //Update cache sequence (write operation)
+        //Has to be locked from searching
+        //Therefore protected by a write lock
+        pthread_rwlock_wrlock(&search_update_rwlock);
+        update_cache(cacheLine);
+        pthread_rwlock_unlock(&search_update_rwlock);
+
+        //Get pointer to data from cacheline
+        cachePoint = cacheLine->webobj_buf;   
+        //Write data to client  
         if ((n = rio_writen(fd, cachePoint, cacheLine->obj_length)) < 0) {
             printf("rio_writen error, can not send data to"  
                 "client from cache\n");
-            pthread_rwlock_unlock(&rwlock);
+            //Abnormal aborts, unlock the read lock
+            pthread_rwlock_unlock(&get_set_rwlock);
             return;
         }  
 
-        pthread_rwlock_unlock(&rwlock); 
+        //Finished reading from cache
+        //Unlock the read lock
+        pthread_rwlock_unlock(&get_set_rwlock); 
         return;
     }
     else {
-        pthread_rwlock_unlock(&rwlock);
+        //Not found in the cache
+        //So unlock the read lock
+        pthread_rwlock_unlock(&get_set_rwlock);
 
-        if ((clientfd = open_clientfd_with_mutex(hostname, serverport)) < 0) {
+        if ((clientfd = open_clientfd_with_mutex(hostname, serverport)) < 0) 
+        {
             printf("request uri error, cannot connect to the server\n");
             return;
         }
@@ -208,10 +256,19 @@ void doit(int fd)
             datasize += n;    
         }
 
+        //When datasize is smaller than our max web object size
+        //We insert the object into the cache
         if (datasize < MAX_OBJECT_SIZE) {
-            pthread_rwlock_wrlock(&rwlock);
+            //The writing process has to be serialized
+            //Therefore protected by a write lock
+            
+            //Also note that racing conditions can be effectively
+            //Prevented because when writing to cache
+            //The write lock makes sure that no one is trying to
+            //Update cache for LRU purposes
+            pthread_rwlock_wrlock(&get_set_rwlock);
             set_webobj_to(uri, cacheBuffer, datasize);
-            pthread_rwlock_unlock(&rwlock);
+            pthread_rwlock_unlock(&get_set_rwlock);
         }
       
         Close(clientfd);
@@ -256,8 +313,8 @@ int open_clientfd_with_mutex(char *hostname, int port)
  * This function is to parse the uri to generate the request to 
  * the server.
  */
-void *generate_request(char *request, char *uri, char *method, char *hostname,
-                        int *serverport) 
+void *generate_request(char *request, char *uri, char *method, 
+                        char *hostname, int *serverport) 
 {
     char uriForward[MAXLINE];
     char *p; 
