@@ -29,7 +29,6 @@ static const char *get = "GET ";
 static const char *version = " HTTP/1.0\r\n";
 
 sem_t mutex;
-sem_t cache_mutex;
 pthread_rwlock_t rwlock;
 
 
@@ -60,7 +59,7 @@ int main(int argc, char **argv)
     Signal(SIGPIPE, SIG_IGN);
     listenfd = Open_listenfd(port);
     sem_init(&mutex, 0, 1);
-    sem_init(&cache_mutex, 0, 1);
+    // sem_init(&cache_mutex, 0, 1);
     pthread_rwlock_init(&rwlock, NULL);
 
     while (1) {
