@@ -29,7 +29,7 @@ void init_cache(){
 /* Exposed interfaces */
 
 linePCache* get_webobj_from(char *uri_in) {
-
+	//Bet object from cache
 	linePCache *current_line;
 	
 	dbg_printf("[in get_webobj_from]uri: %s\n", uri_in);
@@ -40,6 +40,7 @@ linePCache* get_webobj_from(char *uri_in) {
 		if (strcmp(current_line->uri_key, uri_in) == 0)
 		{
 			dbg_printf("[in get_webobj_from] Found in cache\n");
+			put_line_to_head(current_line);
 			return current_line;
 		}
 		current_line = current_line->next_line;
@@ -99,6 +100,7 @@ linePCache* set_webobj_to(char *uri_in, char *webobj_in, int obj_length_in) {
 /* Internal helpers*/
  
 void put_line_to_head(linePCache *new_head) {
+	dbg_printf("Updated Cache for LRU");
 	// Remove line from list
 	linePCache *old_prev_line = new_head->prev_line;
 	linePCache *old_next_line = new_head->next_line;

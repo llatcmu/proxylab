@@ -27,11 +27,15 @@ static const char *connection = "Connection: close\r\n";
 static const char *proxy_connection = "Proxy-Connection: close\r\n";
 static const char *get = "GET ";
 static const char *version = " HTTP/1.0\r\n";
+static void *uri_error = "the request is not a valid URI\r\n";
+static void *method_error = "We only can deal with GET method.\r\n";
 
 sem_t mutex;
+sem_t LRU_mutex;
 pthread_rwlock_t rwlock;
 
-
+void int_handler(int sig);
+int validArg(char *p);
 void *thread(void *vargp);
 unsigned int getHostname(char *uri);
 void *getIndex(char *p, char *index);
@@ -52,14 +56,25 @@ int main(int argc, char **argv)
 
     if (argc != 2) {
         printf("Argument is invalid.\n");
-        exit(1);
+        exit(0);
     }
+    if (!validArg(argv[1])) {
+        printf("Argument is invalid.\n");
+        exit(0);
+    }
+
     port = atoi(argv[1]);
 
+    if ((port < 1000) || (port > 64000)) {
+        printf("Port Number is invalid\n");
+        exit(0);
+    }
+
     Signal(SIGPIPE, SIG_IGN);
+    Signal(SIGINT, int_handler);
     listenfd = Open_listenfd(port);
     sem_init(&mutex, 0, 1);
-    // sem_init(&cache_mutex, 0, 1);
+    sem_init(&LRU_mutex, 0, 1);
     pthread_rwlock_init(&rwlock, NULL);
 
     while (1) {
@@ -87,24 +102,36 @@ void doit(int fd)
     char buf1[MAXLINE] = {0}, buf2[MAX_OBJECT_SIZE] = {0}; 
     char method[MAXLINE] = {0}, uri[MAXLINE] = {0};
     char hostname[MAXLINE] = {0}, request[MAX_OBJECT_SIZE] = {0};
-    char requestHeader[MAX_OBJECT_SIZE];
-    char *cacheBuffer;   
+    char requestHeader[MAX_OBJECT_SIZE], cacheBuffer[MAX_OBJECT_SIZE];
+    char *cachePoint;
+    char check_uri[7];   
     linePCache *cacheLine;
     
     int datasize = 0;
-    int exceeded_size = 0;
     int n, clientfd, serverport = 80;
     int  flags[6] = {0, 0, 0, 0, 0, 0};
 
-
-
     rio_readinitb(&rio1, fd);    
-    if (rio_readlineb(&rio1, buf1, MAXLINE) <= 0)
+    if (rio_readlineb(&rio1, buf1, MAXLINE) <= 0) {
+        printf("Null request\n");
         return;
-
+    }
+        
     sscanf(buf1, "%s %s", method, uri);
     if (strcmp(method, "GET")) {
+        if (rio_writen(fd, method_error, strlen(method_error)) < 0) {
+            printf("rio_writen error.\n");
+            return;
+        }
         printf("We only can deal with GET method.\n");
+        return;
+    }
+    if (strcmp(strncpy(check_uri, uri, 7), "http://")) {
+        if (rio_writen(fd, uri_error, strlen(uri_error)) < 0) {
+            printf("rio_writen error\n");
+            return;
+        }
+        printf("the request is not a valid URI\n");
         return;
     }
 
@@ -129,34 +156,29 @@ void doit(int fd)
     strcat(request, requestHeader);
     strcat(request, "\r\n");
 
-    dbg_printf("go into lock\n");
-
     pthread_rwlock_rdlock(&rwlock);
-    //P(&cache_mutex);
 
-    dbg_printf("start get/write\n");
+    P(&LRU_mutex);
     cacheLine = get_webobj_from(uri);
-    dbg_printf("end get/write\n");
-    pthread_rwlock_unlock(&rwlock);
-
-    //V(&cache_mutex);
-    dbg_printf("out of lock\n");
+    V(&LRU_mutex);
 
     if (cacheLine != NULL) {
-        pthread_rwlock_wrlock(&rwlock);
-        update_cache(cacheLine);
-        pthread_rwlock_unlock(&rwlock);
-        cacheBuffer = cacheLine->webobj_buf;
-        dbg_printf("cache not NULL, size: %d\n", cacheLine->obj_length);
-        dbg_printf("Sizeof return value: %lu\n", sizeof(cacheBuffer));
-        if ((n = rio_writen(fd, cacheBuffer, cacheLine->obj_length)) < 0) {
+        cachePoint = cacheLine->webobj_buf;
+        dbg_printf("Get content from cache, size: %d\n", cacheLine->obj_length);
+     
+        if ((n = rio_writen(fd, cachePoint, cacheLine->obj_length)) < 0) {
             printf("rio_writen error, can not send data to"  
                 "client from cache\n");
+            pthread_rwlock_unlock(&rwlock);
             return;
-        }    
-    }
+        }  
 
+        pthread_rwlock_unlock(&rwlock); 
+        return;
+    }
     else {
+        pthread_rwlock_unlock(&rwlock);
+
         if ((clientfd = open_clientfd_with_mutex(hostname, serverport)) < 0) {
             printf("request uri error, cannot connect to the server\n");
             return;
@@ -170,38 +192,32 @@ void doit(int fd)
 
         rio_readinitb(&rio2, clientfd);
         dbg_printf("Sizeof return value of buff2: %lu\n", sizeof(buf2));
+        
         memset(buf2, 0, sizeof(buf2));
         datasize = 0;
-        exceeded_size = 0;
 
         while ((n = rio_readnb(&rio2, buf2, MAX_OBJECT_SIZE)) > 0) {
-            if (exceeded_size)
-            {
-                memset(buf2, 0, sizeof(buf2));   
-            }
-            rio_writen(fd, buf2, n);
-            datasize += n;  
-            exceeded_size ++;          
+            memcpy(cacheBuffer, buf2, n);
+            
+            if (rio_writen(fd, buf2, n) < 0) {
+                printf("the error occured in rio_writen\n");
+                Close(clientfd);
+                return;
+            }          
+            memset(buf2, 0, sizeof(buf2));   
+            datasize += n;    
         }
-        if (exceeded_size > 1 && datasize < MAX_OBJECT_SIZE)
-        {
-            dbg_printf("datasize: %d, exceeded_size: %d\n", datasize, exceeded_size);
-            exit(0);
-        }
-        dbg_printf("datasize: %d\n", datasize);
 
         if (datasize < MAX_OBJECT_SIZE) {
             pthread_rwlock_wrlock(&rwlock);
-            set_webobj_to(uri, buf2, datasize);
+            set_webobj_to(uri, cacheBuffer, datasize);
             pthread_rwlock_unlock(&rwlock);
         }
-
-        if (n < 0) {
-            Close(clientfd);
-            return;
-        }        
+      
         Close(clientfd);
     }    
+
+
 }
 
 int open_clientfd_with_mutex(char *hostname, int port) 
@@ -331,11 +347,8 @@ unsigned int getHostname(char *uri)
 	unsigned int count = 0;
 	unsigned int count1 = 0;
 
-    printf("uri = %s\n", uri);
-
 	while (*p != '\0') {
 		if (count1 == 3) {
-			printf("count = %d\n", count);
             return (count - 1); 
         }
 		if (*p == '/') {
@@ -348,18 +361,19 @@ unsigned int getHostname(char *uri)
 }
 
 
-// bool validArg(char *p)
-// {
-// 	bool flag = true;
-// 	while ((*p != '\r') && (*p != '\n')) {
-// 		if ((*p > '9') || (*p < '0')) {
-// 			flag = false;
-// 			break;
-// 		}
-// 		p++;
-// 	}
-// 	return flag;
-// }
+int validArg(char *p)
+{
+	int flag = 1;
+    int i = 0;
+	while (i < strlen(p)) {
+		if ((*p > '9') || (*p < '0')) {
+			flag = 0;
+			break;
+		}
+		p++;
+	}
+	return flag;
+}
 
 void *getIndex(char *p, char *index)
 {
@@ -367,6 +381,12 @@ void *getIndex(char *p, char *index)
 	return (void *)index;
 }
 
+void int_handler(int sig) 
+{
+    printf("Exit\n");
+    // free_cache();
+    exit(0);
+}
 
 
 
