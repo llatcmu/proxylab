@@ -287,9 +287,13 @@ void *generate_request(char *request, char *uri, char *method, char *hostname,
 
     return request;
 }
+
  /*
   * This helper function is to generate the request header,
-  * if 
+  * if some specified fields are exist in the header, we need 
+  * to replace it, otherwise, we just append it in the end of 
+  * the header.
+  */
 int *generate_request_header(char *requestHeader, char *buf1, int *flags)
 {   
     char index[MAXLINE];
